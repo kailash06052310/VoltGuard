@@ -12,7 +12,8 @@ public:
     explicit PressureTrendWidget(QWidget *parent = nullptr);
 
     void setData(
-        const QVector<double> &pressures,
+        const QVector<double> &predictedPressures,
+        const QVector<double> &actualPressures,
         const QVector<bool> &safeStates
     );
 
@@ -20,11 +21,15 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 
 private:
-    QVector<double> pressureHistory;
+    QVector<double> predictedPressureHistory;
+    QVector<double> actualPressureHistory;
     QVector<bool> safeHistory;
 
     static constexpr double SAFE_PRESSURE_LIMIT = 100.0;
-    static constexpr int MAX_POINTS = 30;
+
+    // Keep the graph readable by showing
+    // only the latest physics samples.
+    static constexpr int MAX_POINTS = 20;
 };
 
 #endif

@@ -1,238 +1,156 @@
 import json
 import subprocess
+import sys
 from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 
 from physics_engine.physics_engine import PhysicsEngine
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CARGO_MANIFEST = PROJECT_ROOT / "decision_engine" / "Cargo.toml"
-
-
 class ModbusPhysicsBridge:
     """
-    Connects:
+    Connects the Modbus command processing layer
+    with the Python physics engine and Rust decision engine.
 
-        Modbus Command
-              ↓
-        Python Physics Engine
-              ↓
-        Rust Decision Engine
-              ↓
-          ALLOW / BLOCK
+    Data flow:
+
+        Modbus command
+              |
+              v
+        Physics Engine
+              |
+       +------+------+
+       |             |
+       v             v
+    Predicted      Actual
+       |             |
+       +------+------+
+              |
+              v
+       Rust Decision Engine
     """
 
     def __init__(self):
         self.physics_engine = PhysicsEngine()
 
-    def evaluate_command(self, pump_rpm: float, duration: float = 60):
+    def evaluate_command(self, pump_rpm, duration=60):
         """
-        Evaluate an industrial command through the complete
-        Python Physics Engine → Rust Decision Engine pipeline.
+        Evaluate a pump command using the physics engine
+        and then pass the predicted physical state to
+        the Rust decision engine.
         """
 
         # --------------------------------------------------
-        # STEP 1: Run the existing Python Physics Engine
+        # Physics simulation
         # --------------------------------------------------
 
         physics_result = self.physics_engine.evaluate_command(
             pump_rpm=pump_rpm,
-            duration=duration
+            duration=duration,
         )
 
         predicted_state = physics_result["predicted_state"]
+        actual_state = physics_result["actual_state"]
 
         # --------------------------------------------------
-        # STEP 2: Prepare state for Rust Decision Engine
+        # Convert predicted state to JSON
         # --------------------------------------------------
 
-        state = {
-            "pump_rpm": predicted_state["pump_rpm"],
-            "valve_opening": predicted_state["valve_opening"],
-            "flow_rate": predicted_state["flow_rate"],
-            "pressure": predicted_state["pressure"],
-            "safe": predicted_state["safe"],
-        }
+        state_json = json.dumps(predicted_state)
 
         # --------------------------------------------------
-        # STEP 3: Send physical state to Rust
+        # Rust Decision Engine
         # --------------------------------------------------
 
-        decision = self._run_rust_decision_engine(state)
-
-        # --------------------------------------------------
-        # STEP 4: Combine everything into one result
-        # --------------------------------------------------
-
-        return {
-            "command": {
-                "pump_rpm": pump_rpm,
-                "duration": duration,
-            },
-            "predicted_state": state,
-            "decision": decision,
-        }
-
-    def _run_rust_decision_engine(self, state: dict):
-        """
-        Send JSON input to the Rust Decision Engine
-        and receive an ALLOW/BLOCK JSON response.
-        """
-
-        input_json = json.dumps(state)
-
-        command = [
-            "cargo",
-            "run",
-            "--quiet",
-            "--manifest-path",
-            str(CARGO_MANIFEST),
-            "--",
-            "--json",
-        ]
-
-        try:
-            process = subprocess.run(
-                command,
-                input=input_json,
-                text=True,
-                capture_output=True,
-                cwd=PROJECT_ROOT,
-                timeout=30,
-            )
-
-        except subprocess.TimeoutExpired:
-            return {
-                "decision": "BLOCK",
-                "reason": "Rust Decision Engine timed out",
-            }
-
-        except FileNotFoundError:
-            return {
-                "decision": "BLOCK",
-                "reason": "Cargo was not found in PATH",
-            }
-
-        # --------------------------------------------------
-        # Rust process failed
-        # --------------------------------------------------
+        process = subprocess.run(
+            [
+                "cargo",
+                "run",
+                "--quiet",
+                "--manifest-path",
+                str(
+                    PROJECT_ROOT
+                    / "decision_engine"
+                    / "Cargo.toml"
+                ),
+                "--",
+                "--json",
+            ],
+            input=state_json,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+            timeout=30,
+        )
 
         if process.returncode != 0:
-            return {
-                "decision": "BLOCK",
-                "reason": (
-                    "Rust Decision Engine failed: "
-                    + process.stderr.strip()
-                ),
-            }
+            raise RuntimeError(
+                "Rust Decision Engine failed:\n"
+                + process.stderr
+            )
 
-        # --------------------------------------------------
-        # Parse Rust JSON response
-        # --------------------------------------------------
+        if not process.stdout.strip():
+            raise RuntimeError(
+                "Rust Decision Engine returned no output."
+            )
 
         try:
-            response = json.loads(process.stdout)
-
-        except json.JSONDecodeError:
-            return {
-                "decision": "BLOCK",
-                "reason": (
-                    "Rust Decision Engine returned invalid JSON: "
-                    + process.stdout.strip()
-                ),
-            }
+            rust_result = json.loads(
+                process.stdout
+            )
+        except json.JSONDecodeError as error:
+            raise RuntimeError(
+                "Invalid JSON returned by Rust Decision Engine:\n"
+                + process.stdout
+            ) from error
 
         # --------------------------------------------------
-        # Validate response
+        # Final combined result
         # --------------------------------------------------
 
-        if "result" not in response:
-            return {
-                "decision": "BLOCK",
-                "reason": "Invalid response structure from Rust engine",
-            }
+        rust_decision = rust_result["result"]
 
-        return response["result"]
+        return {
+            "command": physics_result["command"],
 
+            "predicted_state": predicted_state,
 
-def print_result(title: str, result: dict):
-    """
-    Display a complete VoltGuard decision.
-    """
+            "actual_state": actual_state,
 
-    print()
-    print("=" * 65)
-    print(f" {title}")
-    print("=" * 65)
+            "safe": physics_result["safe"],
 
-    print()
-    print("COMMAND")
-    print("-" * 65)
-
-    print(f"Pump RPM       : {result['command']['pump_rpm']}")
-    print(f"Duration       : {result['command']['duration']} seconds")
-
-    print()
-    print("PREDICTED PHYSICAL STATE")
-    print("-" * 65)
-
-    state = result["predicted_state"]
-
-    print(f"Pump RPM       : {state['pump_rpm']}")
-    print(f"Valve Opening  : {state['valve_opening']}%")
-    print(f"Flow Rate      : {state['flow_rate']}")
-    print(f"Pressure       : {state['pressure']} bar")
-    print(f"Physics Safe   : {state['safe']}")
-
-    print()
-    print("RUST DECISION ENGINE")
-    print("-" * 65)
-
-    decision = result["decision"]
-
-    print(f"Decision       : {decision['decision']}")
-    print(f"Reason         : {decision['reason']}")
-
-    print()
-    print("=" * 65)
+            "decision": {
+                "decision": rust_decision["decision"],
+                "reason": rust_decision["reason"],
+            },
+        }
 
 
-def main():
-    print()
-    print("=============================================================")
-    print("       VOLTGUARD MODBUS → PHYSICS → DECISION BRIDGE")
-    print("=============================================================")
+if __name__ == "__main__":
 
     bridge = ModbusPhysicsBridge()
 
-    # ----------------------------------------------------------
-    # NORMAL INDUSTRIAL COMMAND
-    # ----------------------------------------------------------
+    print("=== VoltGuard Modbus → Physics → Rust Bridge ===")
 
-    normal_result = bridge.evaluate_command(
-        pump_rpm=1000,
-        duration=60,
-    )
-
-    print_result(
-        "NORMAL COMMAND",
-        normal_result,
-    )
-
-    # ----------------------------------------------------------
-    # DANGEROUS INDUSTRIAL COMMAND
-    # ----------------------------------------------------------
-
-    dangerous_result = bridge.evaluate_command(
+    result = bridge.evaluate_command(
         pump_rpm=4000,
         duration=60,
     )
 
-    print_result(
-        "DANGEROUS COMMAND",
-        dangerous_result,
-    )
+    print("\nCommand:")
+    print(result["command"])
 
+    print("\nPredicted physical state:")
+    print(result["predicted_state"])
 
-if __name__ == "__main__":
-    main()
+    print("\nSimulated actual physical state:")
+    print(result["actual_state"])
+
+    print("\nSecurity decision:")
+    print(result["decision"])

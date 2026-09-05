@@ -1,15 +1,16 @@
 #include "trend_widget.h"
 
+#include <QBrush>
+#include <QColor>
+#include <QFont>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPen>
-#include <QBrush>
-#include <QtMath>
 
 PressureTrendWidget::PressureTrendWidget(QWidget *parent)
     : QWidget(parent)
 {
-    setMinimumHeight(240);
+    setMinimumHeight(300);
     setMinimumWidth(600);
 
     setStyleSheet(
@@ -20,18 +21,28 @@ PressureTrendWidget::PressureTrendWidget(QWidget *parent)
 }
 
 void PressureTrendWidget::setData(
-    const QVector<double> &pressures,
+    const QVector<double> &predictedPressures,
+    const QVector<double> &actualPressures,
     const QVector<bool> &safeStates
 )
 {
-    pressureHistory = pressures;
+    predictedPressureHistory = predictedPressures;
+    actualPressureHistory = actualPressures;
     safeHistory = safeStates;
 
-    if (pressureHistory.size() > MAX_POINTS)
+    if (predictedPressureHistory.size() > MAX_POINTS)
     {
-        pressureHistory =
-            pressureHistory.mid(
-                pressureHistory.size() - MAX_POINTS
+        predictedPressureHistory =
+            predictedPressureHistory.mid(
+                predictedPressureHistory.size() - MAX_POINTS
+            );
+    }
+
+    if (actualPressureHistory.size() > MAX_POINTS)
+    {
+        actualPressureHistory =
+            actualPressureHistory.mid(
+                actualPressureHistory.size() - MAX_POINTS
             );
     }
 
@@ -60,8 +71,8 @@ void PressureTrendWidget::paintEvent(
 
     const int leftMargin = 55;
     const int rightMargin = 20;
-    const int topMargin = 35;
-    const int bottomMargin = 35;
+    const int topMargin = 55;
+    const int bottomMargin = 45;
 
     const QRect plotArea(
         leftMargin,
@@ -70,18 +81,14 @@ void PressureTrendWidget::paintEvent(
         height() - topMargin - bottomMargin
     );
 
-    // --------------------------------------------------
-    // Background
-    // --------------------------------------------------
-
     painter.fillRect(
         rect(),
         QColor("#1e1e1e")
     );
 
-    // --------------------------------------------------
+    // ==================================================
     // Title
-    // --------------------------------------------------
+    // ==================================================
 
     painter.setPen(
         QColor("#ffffff")
@@ -98,15 +105,65 @@ void PressureTrendWidget::paintEvent(
     painter.drawText(
         15,
         22,
-        "PHYSICS PRESSURE TREND"
+        "PHYSICS PRESSURE: PREDICTED vs ACTUAL"
     );
 
-    // --------------------------------------------------
-    // Empty state
-    // --------------------------------------------------
+    // ==================================================
+    // Legend
+    // ==================================================
 
-    if (pressureHistory.isEmpty())
+    painter.setFont(
+        QFont(
+            "Arial",
+            9,
+            QFont::Bold
+        )
+    );
+
+    painter.setPen(
+        QColor("#5dade2")
+    );
+
+    painter.drawText(
+        20,
+        43,
+        "PREDICTED"
+    );
+
+    painter.setPen(
+        QColor("#ffffff")
+    );
+
+    painter.drawText(
+        105,
+        43,
+        "ACTUAL"
+    );
+
+    painter.setPen(
+        QColor("#f0c040")
+    );
+
+    painter.drawText(
+        175,
+        43,
+        "SAFE LIMIT"
+    );
+
+    // ==================================================
+    // Empty state
+    // ==================================================
+
+    if (
+        predictedPressureHistory.isEmpty()
+        &&
+        actualPressureHistory.isEmpty()
+    )
     {
+        painter.setPen(
+            QColor("#aaaaaa")
+        );
+
         painter.setFont(
             QFont(
                 "Arial",
@@ -123,14 +180,38 @@ void PressureTrendWidget::paintEvent(
         return;
     }
 
-    // --------------------------------------------------
+    // ==================================================
+    // Determine graph count
+    // ==================================================
+
+    int count =
+        predictedPressureHistory.size();
+
+    if (
+        actualPressureHistory.size()
+        > count
+    )
+    {
+        count =
+            actualPressureHistory.size();
+    }
+
+    if (count <= 0)
+    {
+        return;
+    }
+
+    // ==================================================
     // Determine graph scale
-    // --------------------------------------------------
+    // ==================================================
 
     double maximumPressure =
         SAFE_PRESSURE_LIMIT;
 
-    for (double pressure : pressureHistory)
+    for (
+        double pressure :
+        predictedPressureHistory
+    )
     {
         if (pressure > maximumPressure)
         {
@@ -138,7 +219,17 @@ void PressureTrendWidget::paintEvent(
         }
     }
 
-    // Add headroom above the maximum value.
+    for (
+        double pressure :
+        actualPressureHistory
+    )
+    {
+        if (pressure > maximumPressure)
+        {
+            maximumPressure = pressure;
+        }
+    }
+
     maximumPressure *= 1.15;
 
     if (maximumPressure < 110.0)
@@ -146,20 +237,24 @@ void PressureTrendWidget::paintEvent(
         maximumPressure = 110.0;
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // Grid
-    // --------------------------------------------------
-
-    painter.setPen(
-        QPen(
-            QColor("#3f3f3f"),
-            1
-        )
-    );
+    // ==================================================
 
     const int horizontalLines = 5;
 
-    for (int i = 0; i <= horizontalLines; ++i)
+    painter.setFont(
+        QFont(
+            "Arial",
+            8
+        )
+    );
+
+    for (
+        int i = 0;
+        i <= horizontalLines;
+        ++i
+    )
     {
         const double ratio =
             static_cast<double>(i)
@@ -167,9 +262,17 @@ void PressureTrendWidget::paintEvent(
 
         const int y =
             plotArea.bottom()
-            - static_cast<int>(
+            -
+            static_cast<int>(
                 ratio * plotArea.height()
             );
+
+        painter.setPen(
+            QPen(
+                QColor("#3f3f3f"),
+                1
+            )
+        );
 
         painter.drawLine(
             plotArea.left(),
@@ -178,19 +281,12 @@ void PressureTrendWidget::paintEvent(
             y
         );
 
-        const double value =
-            ratio * maximumPressure;
-
         painter.setPen(
             QColor("#aaaaaa")
         );
 
-        painter.setFont(
-            QFont(
-                "Arial",
-                8
-            )
-        );
+        const double value =
+            ratio * maximumPressure;
 
         painter.drawText(
             5,
@@ -201,18 +297,11 @@ void PressureTrendWidget::paintEvent(
                 0
             )
         );
-
-        painter.setPen(
-            QPen(
-                QColor("#3f3f3f"),
-                1
-            )
-        );
     }
 
-    // --------------------------------------------------
-    // Safe pressure limit line
-    // --------------------------------------------------
+    // ==================================================
+    // Safe pressure limit
+    // ==================================================
 
     const double safeRatio =
         SAFE_PRESSURE_LIMIT
@@ -220,18 +309,17 @@ void PressureTrendWidget::paintEvent(
 
     const int safeY =
         plotArea.bottom()
-        - static_cast<int>(
+        -
+        static_cast<int>(
             safeRatio * plotArea.height()
         );
 
-    QPen safeLimitPen(
-        QColor("#f0c040"),
-        2,
-        Qt::DashLine
-    );
-
     painter.setPen(
-        safeLimitPen
+        QPen(
+            QColor("#f0c040"),
+            2,
+            Qt::DashLine
+        )
     );
 
     painter.drawLine(
@@ -240,6 +328,13 @@ void PressureTrendWidget::paintEvent(
         plotArea.right(),
         safeY
     );
+
+    // Keep label safely inside the graph.
+    const int safeLabelY =
+        qMax(
+            plotArea.top() + 14,
+            safeY - 7
+        );
 
     painter.setPen(
         QColor("#f0c040")
@@ -254,40 +349,50 @@ void PressureTrendWidget::paintEvent(
     );
 
     painter.drawText(
-        plotArea.right() - 115,
-        safeY - 6,
-        "SAFE LIMIT: 100 bar"
+        plotArea.right() - 155,
+        safeLabelY,
+        "100 bar SAFE LIMIT"
     );
 
-    // --------------------------------------------------
-    // Pressure graph
-    // --------------------------------------------------
+    // ==================================================
+    // Helper for Y coordinate
+    // ==================================================
 
-    if (pressureHistory.size() == 1)
+    auto calculateY =
+        [&](double pressure)
+        {
+            const double ratio =
+                pressure / maximumPressure;
+
+            return plotArea.bottom()
+                -
+                static_cast<int>(
+                    ratio * plotArea.height()
+                );
+        };
+
+    // ==================================================
+    // Draw predicted pressure line
+    // ==================================================
+
+    if (
+        predictedPressureHistory.size() == 1
+    )
     {
-        const double pressure =
-            pressureHistory.first();
-
-        const double ratio =
-            pressure / maximumPressure;
-
         const int x =
             plotArea.center().x();
 
         const int y =
-            plotArea.bottom()
-            - static_cast<int>(
-                ratio * plotArea.height()
+            calculateY(
+                predictedPressureHistory.first()
             );
-
-        painter.setBrush(
-            safeHistory.first()
-                ? QColor("#6ee7a0")
-                : QColor("#ff5c5c")
-        );
 
         painter.setPen(
             Qt::NoPen
+        );
+
+        painter.setBrush(
+            QColor("#5dade2")
         );
 
         painter.drawEllipse(
@@ -295,129 +400,101 @@ void PressureTrendWidget::paintEvent(
             5,
             5
         );
-
-        return;
     }
-
-    const int count =
-        pressureHistory.size();
-
-    // Draw connecting line.
-    for (int i = 1; i < count; ++i)
+    else if (
+        predictedPressureHistory.size() > 1
+    )
     {
-        const double previousPressure =
-            pressureHistory[i - 1];
+        painter.setPen(
+            QPen(
+                QColor("#5dade2"),
+                3
+            )
+        );
 
-        const double currentPressure =
-            pressureHistory[i];
-
-        const double previousRatio =
-            previousPressure / maximumPressure;
-
-        const double currentRatio =
-            currentPressure / maximumPressure;
-
-        const int previousX =
-            plotArea.left()
-            + static_cast<int>(
-                static_cast<double>(i - 1)
-                / (count - 1)
-                * plotArea.width()
-            );
-
-        const int currentX =
-            plotArea.left()
-            + static_cast<int>(
-                static_cast<double>(i)
-                / (count - 1)
-                * plotArea.width()
-            );
-
-        const int previousY =
-            plotArea.bottom()
-            - static_cast<int>(
-                previousRatio
-                * plotArea.height()
-            );
-
-        const int currentY =
-            plotArea.bottom()
-            - static_cast<int>(
-                currentRatio
-                * plotArea.height()
-            );
-
-        QPen linePen;
-
-        if (
-            i < safeHistory.size()
-            && !safeHistory[i]
+        for (
+            int i = 1;
+            i < predictedPressureHistory.size();
+            ++i
         )
         {
-            linePen = QPen(
-                QColor("#ff5c5c"),
-                3
+            const int previousX =
+                plotArea.left()
+                +
+                static_cast<int>(
+                    static_cast<double>(i - 1)
+                    /
+                    (predictedPressureHistory.size() - 1)
+                    *
+                    plotArea.width()
+                );
+
+            const int currentX =
+                plotArea.left()
+                +
+                static_cast<int>(
+                    static_cast<double>(i)
+                    /
+                    (predictedPressureHistory.size() - 1)
+                    *
+                    plotArea.width()
+                );
+
+            const int previousY =
+                calculateY(
+                    predictedPressureHistory[i - 1]
+                );
+
+            const int currentY =
+                calculateY(
+                    predictedPressureHistory[i]
+                );
+
+            painter.drawLine(
+                previousX,
+                previousY,
+                currentX,
+                currentY
             );
         }
-        else
-        {
-            linePen = QPen(
-                QColor("#6ee7a0"),
-                3
-            );
-        }
-
-        painter.setPen(
-            linePen
-        );
-
-        painter.drawLine(
-            previousX,
-            previousY,
-            currentX,
-            currentY
-        );
     }
 
-    // --------------------------------------------------
-    // Data points
-    // --------------------------------------------------
+    // ==================================================
+    // Predicted data points
+    // ==================================================
 
     painter.setPen(
         Qt::NoPen
     );
 
-    for (int i = 0; i < count; ++i)
+    for (
+        int i = 0;
+        i < predictedPressureHistory.size();
+        ++i
+    )
     {
-        const double pressure =
-            pressureHistory[i];
-
-        const double ratio =
-            pressure / maximumPressure;
-
         const int x =
+            predictedPressureHistory.size() == 1
+            ?
+            plotArea.center().x()
+            :
             plotArea.left()
-            + static_cast<int>(
+            +
+            static_cast<int>(
                 static_cast<double>(i)
-                / (count - 1)
-                * plotArea.width()
+                /
+                (predictedPressureHistory.size() - 1)
+                *
+                plotArea.width()
             );
 
         const int y =
-            plotArea.bottom()
-            - static_cast<int>(
-                ratio * plotArea.height()
+            calculateY(
+                predictedPressureHistory[i]
             );
 
-        const bool safe =
-            i < safeHistory.size()
-            ? safeHistory[i]
-            : true;
-
         painter.setBrush(
-            safe
-                ? QColor("#6ee7a0")
-                : QColor("#ff5c5c")
+            QColor("#5dade2")
         );
 
         painter.drawEllipse(
@@ -427,37 +504,196 @@ void PressureTrendWidget::paintEvent(
         );
     }
 
-    // --------------------------------------------------
-    // Latest value
-    // --------------------------------------------------
+    // ==================================================
+    // Draw actual pressure line
+    // ==================================================
 
-    const double latestPressure =
-        pressureHistory.last();
+    if (
+        actualPressureHistory.size() == 1
+    )
+    {
+        const int x =
+            plotArea.center().x();
+
+        const int y =
+            calculateY(
+                actualPressureHistory.first()
+            );
+
+        painter.setPen(
+            Qt::NoPen
+        );
+
+        painter.setBrush(
+            QColor("#ffffff")
+        );
+
+        painter.drawEllipse(
+            QPoint(x, y),
+            5,
+            5
+        );
+    }
+    else if (
+        actualPressureHistory.size() > 1
+    )
+    {
+        painter.setPen(
+            QPen(
+                QColor("#ffffff"),
+                2
+            )
+        );
+
+        for (
+            int i = 1;
+            i < actualPressureHistory.size();
+            ++i
+        )
+        {
+            const int previousX =
+                plotArea.left()
+                +
+                static_cast<int>(
+                    static_cast<double>(i - 1)
+                    /
+                    (actualPressureHistory.size() - 1)
+                    *
+                    plotArea.width()
+                );
+
+            const int currentX =
+                plotArea.left()
+                +
+                static_cast<int>(
+                    static_cast<double>(i)
+                    /
+                    (actualPressureHistory.size() - 1)
+                    *
+                    plotArea.width()
+                );
+
+            const int previousY =
+                calculateY(
+                    actualPressureHistory[i - 1]
+                );
+
+            const int currentY =
+                calculateY(
+                    actualPressureHistory[i]
+                );
+
+            painter.drawLine(
+                previousX,
+                previousY,
+                currentX,
+                currentY
+            );
+        }
+    }
+
+    // ==================================================
+    // Actual data points
+    // ==================================================
 
     painter.setPen(
-        latestPressure > SAFE_PRESSURE_LIMIT
-            ? QColor("#ff5c5c")
-            : QColor("#6ee7a0")
+        Qt::NoPen
     );
+
+    for (
+        int i = 0;
+        i < actualPressureHistory.size();
+        ++i
+    )
+    {
+        const int x =
+            actualPressureHistory.size() == 1
+            ?
+            plotArea.center().x()
+            :
+            plotArea.left()
+            +
+            static_cast<int>(
+                static_cast<double>(i)
+                /
+                (actualPressureHistory.size() - 1)
+                *
+                plotArea.width()
+            );
+
+        const int y =
+            calculateY(
+                actualPressureHistory[i]
+            );
+
+        painter.setBrush(
+            QColor("#ffffff")
+        );
+
+        painter.drawEllipse(
+            QPoint(x, y),
+            3,
+            3
+        );
+    }
+
+    // ==================================================
+    // Latest values
+    // ==================================================
 
     painter.setFont(
         QFont(
             "Arial",
-            10,
+            9,
             QFont::Bold
         )
     );
 
-    painter.drawText(
-        plotArea.left(),
-        height() - 10,
-        QString(
-            "Latest pressure: %1 bar"
-        ).arg(
-            latestPressure,
-            0,
-            'f',
-            2
-        )
-    );
+    if (!predictedPressureHistory.isEmpty())
+    {
+        const double latestPredicted =
+            predictedPressureHistory.last();
+
+        painter.setPen(
+            QColor("#5dade2")
+        );
+
+        painter.drawText(
+            plotArea.left(),
+            height() - 10,
+            QString(
+                "Predicted: %1 bar"
+            ).arg(
+                latestPredicted,
+                0,
+                'f',
+                2
+            )
+        );
+    }
+
+    if (!actualPressureHistory.isEmpty())
+    {
+        const double latestActual =
+            actualPressureHistory.last();
+
+        painter.setPen(
+            latestActual > SAFE_PRESSURE_LIMIT
+                ? QColor("#ff5c5c")
+                : QColor("#ffffff")
+        );
+
+        painter.drawText(
+            plotArea.left() + 150,
+            height() - 10,
+            QString(
+                "Actual: %1 bar"
+            ).arg(
+                latestActual,
+                0,
+                'f',
+                2
+            )
+        );
+    }
 }

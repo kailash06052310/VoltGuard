@@ -17,47 +17,28 @@ public:
     );
 
 private:
-    // --------------------------------------------------
-    // Dashboard telemetry
-    // --------------------------------------------------
-
+    // System Monitor page
     QLabel *systemStatusLabel;
     QLabel *pumpRpmLabel;
     QLabel *pressureLabel;
     QLabel *flowRateLabel;
     QLabel *valveLabel;
 
-    // --------------------------------------------------
-    // Security decision
-    // --------------------------------------------------
+    PressureTrendWidget *pressureTrendWidget;
 
+    // Security Center page
     QLabel *decisionLabel;
     QLabel *actionLabel;
-
-    // --------------------------------------------------
-    // Security event table
-    // --------------------------------------------------
+    QLabel *reasonLabel;
 
     QTableWidget *eventTable;
 
-    // --------------------------------------------------
-    // Physics trend visualization
-    // --------------------------------------------------
-
-    PressureTrendWidget *pressureTrendWidget;
-
-    QVector<double> pressureHistory;
+    // Physics history
+    QVector<double> predictedPressureHistory;
+    QVector<double> actualPressureHistory;
     QVector<bool> safeHistory;
 
-    // --------------------------------------------------
-    // Automatic dashboard refresh
-    // --------------------------------------------------
-
     QTimer *refreshTimer;
-
-    // --------------------------------------------------
-    // Data loading
-    // --------------------------------------------------
 
     void loadSecurityEvents();
 };

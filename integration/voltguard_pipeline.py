@@ -42,21 +42,28 @@ class VoltGuardPipeline:
         v
     Python Physics Engine
         |
-        v
-    Rust Decision Engine
-        |
-        v
-    Packet Enforcer
-        |
-        +----------------+
-        |                |
-        v                v
-     FORWARD           DROP
-        |                |
-        +-------+--------+
-                |
-                v
-        Security Event Log
+        +----------------------+
+        |                      |
+        v                      v
+    Predicted State       Actual State
+        |                      |
+        +----------+-----------+
+                   |
+                   v
+          Rust Decision Engine
+                   |
+                   v
+          Packet Enforcement
+                   |
+            +------+------+
+            |             |
+            v             v
+         FORWARD        DROP
+            |             |
+            +------+------+
+                   |
+                   v
+          Security Event Log
     """
 
     def __init__(self):
@@ -173,31 +180,73 @@ class VoltGuardPipeline:
             duration=duration,
         )
 
-        state = result["predicted_state"]
+        predicted_state = result["predicted_state"]
+        actual_state = result["actual_state"]
+
+        # --------------------------------------------------
+        # Predicted physical state
+        # --------------------------------------------------
+
+        print()
+        print("Predicted Physical State")
+        print("-" * 40)
 
         print(
             f"Pump RPM      : "
-            f"{state['pump_rpm']}"
+            f"{predicted_state['pump_rpm']}"
         )
 
         print(
             f"Valve Opening : "
-            f"{state['valve_opening']}%"
+            f"{predicted_state['valve_opening']}%"
         )
 
         print(
             f"Flow Rate     : "
-            f"{state['flow_rate']}"
+            f"{predicted_state['flow_rate']}"
         )
 
         print(
             f"Pressure      : "
-            f"{state['pressure']} bar"
+            f"{predicted_state['pressure']} bar"
         )
 
         print(
             f"Physics Safe  : "
-            f"{state['safe']}"
+            f"{predicted_state['safe']}"
+        )
+
+        # --------------------------------------------------
+        # Simulated actual physical state
+        # --------------------------------------------------
+
+        print()
+        print("Simulated Actual Physical State")
+        print("-" * 40)
+
+        print(
+            f"Pump RPM      : "
+            f"{actual_state['pump_rpm']}"
+        )
+
+        print(
+            f"Valve Opening : "
+            f"{actual_state['valve_opening']}%"
+        )
+
+        print(
+            f"Flow Rate     : "
+            f"{actual_state['flow_rate']}"
+        )
+
+        print(
+            f"Pressure      : "
+            f"{actual_state['pressure']} bar"
+        )
+
+        print(
+            f"Physics Safe  : "
+            f"{actual_state['safe']}"
         )
 
         # --------------------------------------------------
@@ -265,7 +314,8 @@ class VoltGuardPipeline:
         event = self.logger.log_event(
             packet=hex_packet,
             pump_rpm=parsed["pump_rpm"],
-            predicted_state=state,
+            predicted_state=predicted_state,
+            actual_state=actual_state,
             decision=decision,
         )
 
@@ -285,6 +335,7 @@ class VoltGuardPipeline:
 
             print("                 [OK] COMMAND ALLOWED")
             print("                 ACTION: FORWARD")
+
             print(
                 "                 OT ENDPOINT: "
                 "COMMAND ACCEPTED"
@@ -294,20 +345,31 @@ class VoltGuardPipeline:
 
             print("                 [BLOCKED] COMMAND BLOCKED")
             print("                 ACTION: DROP")
+
             print(
                 "                 OT ENDPOINT: "
                 "COMMAND REJECTED"
             )
-            print("                 SECURITY ALERT GENERATED")
+
+            print(
+                "                 SECURITY ALERT GENERATED"
+            )
 
         print("=" * 70)
 
         return {
             "packet": hex_packet,
+
             "pump_rpm": parsed["pump_rpm"],
-            "predicted_state": state,
+
+            "predicted_state": predicted_state,
+
+            "actual_state": actual_state,
+
             "decision": decision,
+
             "enforcement": asdict(enforcement),
+
             "security_event": event,
         }
 

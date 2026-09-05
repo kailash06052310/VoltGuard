@@ -184,7 +184,7 @@ class TestVoltGuardPipeline(unittest.TestCase):
 
         self.assertEqual(
             event["reason"],
-            "Pressure exceeds safe limit: 122.67 bar",
+            "Pressure exceeds safe limit: 126.67 bar",
         )
 
     # --------------------------------------------------

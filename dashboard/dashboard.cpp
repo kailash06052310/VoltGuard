@@ -4,17 +4,18 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFont>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QTableWidgetItem>
 #include <QBrush>
 #include <QColor>
+#include <QTableWidgetItem>
+#include <QTabWidget>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <QFont>
 
 VoltGuardDashboard::VoltGuardDashboard(
     QWidget *parent
@@ -25,7 +26,11 @@ VoltGuardDashboard::VoltGuardDashboard(
         "VoltGuard OT Dashboard"
     );
 
-    resize(1100, 900);
+    resize(1150, 850);
+
+    // ==================================================
+    // Main container
+    // ==================================================
 
     auto *centralWidget =
         new QWidget(this);
@@ -35,13 +40,22 @@ VoltGuardDashboard::VoltGuardDashboard(
             centralWidget
         );
 
-    // --------------------------------------------------
+    mainLayout->setContentsMargins(
+        15,
+        15,
+        15,
+        15
+    );
+
+    mainLayout->setSpacing(10);
+
+    // ==================================================
     // Dashboard title
-    // --------------------------------------------------
+    // ==================================================
 
     auto *title =
         new QLabel(
-            "VOLTGUARD OT DASHBOARD"
+            "VOLTGUARD OT SECURITY DASHBOARD"
         );
 
     title->setAlignment(
@@ -51,10 +65,51 @@ VoltGuardDashboard::VoltGuardDashboard(
     title->setStyleSheet(
         "font-size: 28px;"
         "font-weight: bold;"
-        "padding: 15px;"
+        "padding: 8px;"
     );
 
     mainLayout->addWidget(title);
+
+    // ==================================================
+    // Tabs
+    // ==================================================
+
+    auto *tabs =
+        new QTabWidget(this);
+
+    tabs->setDocumentMode(false);
+
+    tabs->setStyleSheet(
+        "QTabBar::tab {"
+        "    padding: 10px 25px;"
+        "    font-size: 14px;"
+        "    font-weight: bold;"
+        "}"
+        "QTabBar::tab:selected {"
+        "    font-weight: bold;"
+        "}"
+    );
+
+    // ==================================================
+    // PAGE 1 - SYSTEM MONITOR
+    // ==================================================
+
+    auto *systemPage =
+        new QWidget();
+
+    auto *systemLayout =
+        new QVBoxLayout(
+            systemPage
+        );
+
+    systemLayout->setContentsMargins(
+        10,
+        10,
+        10,
+        10
+    );
+
+    systemLayout->setSpacing(10);
 
     // --------------------------------------------------
     // System status
@@ -72,19 +127,39 @@ VoltGuardDashboard::VoltGuardDashboard(
     systemStatusLabel->setStyleSheet(
         "font-size: 20px;"
         "font-weight: bold;"
-        "padding: 10px;"
+        "padding: 12px;"
+        "background-color: #1f4d2b;"
+        "color: white;"
+        "border-radius: 8px;"
     );
 
-    mainLayout->addWidget(
+    systemLayout->addWidget(
         systemStatusLabel
     );
 
     // --------------------------------------------------
-    // Telemetry cards
+    // Telemetry
     // --------------------------------------------------
+
+    auto *telemetryTitle =
+        new QLabel(
+            "CURRENT PHYSICAL STATE"
+        );
+
+    telemetryTitle->setStyleSheet(
+        "font-size: 18px;"
+        "font-weight: bold;"
+        "padding-top: 5px;"
+    );
+
+    systemLayout->addWidget(
+        telemetryTitle
+    );
 
     auto *telemetryLayout =
         new QHBoxLayout();
+
+    telemetryLayout->setSpacing(10);
 
     pumpRpmLabel =
         new QLabel(
@@ -93,7 +168,7 @@ VoltGuardDashboard::VoltGuardDashboard(
 
     pressureLabel =
         new QLabel(
-            "Pressure\n--"
+            "Predicted Pressure\n--"
         );
 
     flowRateLabel =
@@ -107,12 +182,12 @@ VoltGuardDashboard::VoltGuardDashboard(
         );
 
     const QString telemetryStyle =
-        "font-size: 18px;"
+        "font-size: 17px;"
         "font-weight: bold;"
         "border: 1px solid gray;"
         "border-radius: 8px;"
-        "padding: 20px;"
-        "min-width: 180px;";
+        "padding: 18px;"
+        "min-width: 170px;";
 
     pumpRpmLabel->setStyleSheet(
         telemetryStyle
@@ -146,13 +221,83 @@ VoltGuardDashboard::VoltGuardDashboard(
         valveLabel
     );
 
-    mainLayout->addLayout(
+    systemLayout->addLayout(
         telemetryLayout
     );
 
     // --------------------------------------------------
-    // Decision and action
+    // Physics graph
     // --------------------------------------------------
+
+    auto *trendTitle =
+        new QLabel(
+            "PHYSICS MONITORING"
+        );
+
+    trendTitle->setStyleSheet(
+        "font-size: 19px;"
+        "font-weight: bold;"
+        "padding-top: 5px;"
+    );
+
+    systemLayout->addWidget(
+        trendTitle
+    );
+
+    pressureTrendWidget =
+        new PressureTrendWidget();
+
+    systemLayout->addWidget(
+        pressureTrendWidget,
+        1
+    );
+
+    tabs->addTab(
+        systemPage,
+        "SYSTEM MONITOR"
+    );
+
+    // ==================================================
+    // PAGE 2 - SECURITY CENTER
+    // ==================================================
+
+    auto *securityPage =
+        new QWidget();
+
+    auto *securityLayout =
+        new QVBoxLayout(
+            securityPage
+        );
+
+    securityLayout->setContentsMargins(
+        10,
+        10,
+        10,
+        10
+    );
+
+    securityLayout->setSpacing(10);
+
+    auto *securityTitle =
+        new QLabel(
+            "SECURITY CENTER"
+        );
+
+    securityTitle->setStyleSheet(
+        "font-size: 20px;"
+        "font-weight: bold;"
+    );
+
+    securityLayout->addWidget(
+        securityTitle
+    );
+
+    // --------------------------------------------------
+    // Decision and action row
+    // --------------------------------------------------
+
+    auto *securitySummary =
+        new QHBoxLayout();
 
     decisionLabel =
         new QLabel(
@@ -164,75 +309,91 @@ VoltGuardDashboard::VoltGuardDashboard(
             "Action: --"
         );
 
+    decisionLabel->setAlignment(
+        Qt::AlignCenter
+    );
+
+    actionLabel->setAlignment(
+        Qt::AlignCenter
+    );
+
     decisionLabel->setStyleSheet(
         "font-size: 20px;"
         "font-weight: bold;"
-        "padding: 10px;"
+        "padding: 15px;"
+        "border: 1px solid gray;"
+        "border-radius: 8px;"
     );
 
     actionLabel->setStyleSheet(
         "font-size: 18px;"
-        "padding: 10px;"
+        "font-weight: bold;"
+        "padding: 15px;"
+        "border: 1px solid gray;"
+        "border-radius: 8px;"
     );
 
-    mainLayout->addWidget(
+    securitySummary->addWidget(
         decisionLabel
     );
 
-    mainLayout->addWidget(
+    securitySummary->addWidget(
         actionLabel
     );
 
+    securityLayout->addLayout(
+        securitySummary
+    );
+
     // --------------------------------------------------
-    // Physics trend
+    // Reason
     // --------------------------------------------------
 
-    auto *trendTitle =
+    reasonLabel =
         new QLabel(
-            "PHYSICS MONITORING"
+            "Reason: Waiting for VoltGuard events"
         );
 
-    trendTitle->setStyleSheet(
-        "font-size: 20px;"
-        "font-weight: bold;"
-        "padding-top: 10px;"
-        "padding-bottom: 5px;"
+    reasonLabel->setWordWrap(
+        true
     );
 
-    mainLayout->addWidget(
-        trendTitle
+    reasonLabel->setStyleSheet(
+        "font-size: 15px;"
+        "padding: 12px;"
+        "border: 1px solid gray;"
+        "border-radius: 8px;"
     );
 
-    pressureTrendWidget =
-        new PressureTrendWidget(
-            this
-        );
-
-    mainLayout->addWidget(
-        pressureTrendWidget
+    securityLayout->addWidget(
+        reasonLabel
     );
 
     // --------------------------------------------------
-    // Security events
+    // Events title
     // --------------------------------------------------
 
     auto *eventsTitle =
         new QLabel(
-            "SECURITY EVENTS"
+            "SECURITY EVENT HISTORY"
         );
 
     eventsTitle->setStyleSheet(
-        "font-size: 20px;"
+        "font-size: 18px;"
         "font-weight: bold;"
-        "padding-top: 10px;"
+        "padding-top: 5px;"
     );
 
-    mainLayout->addWidget(
+    securityLayout->addWidget(
         eventsTitle
     );
 
+    // --------------------------------------------------
+    // Event table
+    // --------------------------------------------------
+
     eventTable =
-        new QTableWidget(this);
+        new QTableWidget();
 
     eventTable->setColumnCount(4);
 
@@ -275,23 +436,38 @@ VoltGuardDashboard::VoltGuardDashboard(
         QAbstractItemView::SelectRows
     );
 
+    eventTable->setAlternatingRowColors(
+        true
+    );
+
+    securityLayout->addWidget(
+        eventTable,
+        1
+    );
+
+    tabs->addTab(
+        securityPage,
+        "SECURITY CENTER"
+    );
+
     mainLayout->addWidget(
-        eventTable
+        tabs,
+        1
     );
 
     setCentralWidget(
         centralWidget
     );
 
-    // --------------------------------------------------
+    // ==================================================
     // Initial data load
-    // --------------------------------------------------
+    // ==================================================
 
     loadSecurityEvents();
 
-    // --------------------------------------------------
+    // ==================================================
     // Automatic refresh
-    // --------------------------------------------------
+    // ==================================================
 
     refreshTimer =
         new QTimer(this);
@@ -310,9 +486,10 @@ VoltGuardDashboard::VoltGuardDashboard(
     refreshTimer->start();
 }
 
-// ------------------------------------------------------
+
+// ======================================================
 // Load security events
-// ------------------------------------------------------
+// ======================================================
 
 void VoltGuardDashboard::loadSecurityEvents()
 {
@@ -333,21 +510,36 @@ void VoltGuardDashboard::loadSecurityEvents()
             "SYSTEM STATUS: NO SECURITY LOG"
         );
 
+        systemStatusLabel->setStyleSheet(
+            "font-size: 20px;"
+            "font-weight: bold;"
+            "padding: 12px;"
+            "background-color: #5c1f1f;"
+            "color: white;"
+            "border-radius: 8px;"
+        );
+
         decisionLabel->setText(
             "Decision: NO DATA"
         );
 
         actionLabel->setText(
-            "Action: Waiting for VoltGuard events"
+            "Action: WAITING"
+        );
+
+        reasonLabel->setText(
+            "Reason: Waiting for VoltGuard events"
         );
 
         eventTable->setRowCount(0);
 
-        pressureHistory.clear();
+        predictedPressureHistory.clear();
+        actualPressureHistory.clear();
         safeHistory.clear();
 
         pressureTrendWidget->setData(
-            pressureHistory,
+            predictedPressureHistory,
+            actualPressureHistory,
             safeHistory
         );
 
@@ -356,7 +548,8 @@ void VoltGuardDashboard::loadSecurityEvents()
 
     eventTable->setRowCount(0);
 
-    pressureHistory.clear();
+    predictedPressureHistory.clear();
+    actualPressureHistory.clear();
     safeHistory.clear();
 
     QString latestDecision;
@@ -369,9 +562,9 @@ void VoltGuardDashboard::loadSecurityEvents()
 
     bool foundEvent = false;
 
-    // --------------------------------------------------
+    // ==================================================
     // Read every JSONL event
-    // --------------------------------------------------
+    // ==================================================
 
     while (!file.atEnd())
     {
@@ -407,9 +600,22 @@ void VoltGuardDashboard::loadSecurityEvents()
         const QJsonObject event =
             document.object();
 
-        const QJsonObject state =
+        // --------------------------------------------------
+        // Predicted state
+        // --------------------------------------------------
+
+        const QJsonObject predictedState =
             event.value(
                 "predicted_state"
+            ).toObject();
+
+        // --------------------------------------------------
+        // Actual state
+        // --------------------------------------------------
+
+        const QJsonObject actualState =
+            event.value(
+                "actual_state"
             ).toObject();
 
         const QString timestamp =
@@ -432,22 +638,33 @@ void VoltGuardDashboard::loadSecurityEvents()
                 "reason"
             ).toString();
 
-        const double pressure =
-            state.value(
+        const double predictedPressure =
+            predictedState.value(
                 "pressure"
             ).toDouble();
 
+        const double actualPressure =
+            actualState.value(
+                "pressure"
+            ).toDouble(
+                    predictedPressure
+                );
+
         const bool safe =
-            state.value(
+            predictedState.value(
                 "safe"
             ).toBool();
 
         // --------------------------------------------------
-        // Store physics trend data
+        // Store trend data
         // --------------------------------------------------
 
-        pressureHistory.append(
-            pressure
+        predictedPressureHistory.append(
+            predictedPressure
+        );
+
+        actualPressureHistory.append(
+            actualPressure
         );
 
         safeHistory.append(
@@ -513,9 +730,9 @@ void VoltGuardDashboard::loadSecurityEvents()
             reasonItem
         );
 
-        // --------------------------------------------------
+        // ==================================================
         // Visual security highlighting
-        // --------------------------------------------------
+        // ==================================================
 
         if (decision == "BLOCK")
         {
@@ -618,9 +835,9 @@ void VoltGuardDashboard::loadSecurityEvents()
             );
         }
 
-        // --------------------------------------------------
+        // ==================================================
         // Store latest event
-        // --------------------------------------------------
+        // ==================================================
 
         latestDecision =
             decision;
@@ -629,20 +846,20 @@ void VoltGuardDashboard::loadSecurityEvents()
             reason;
 
         latestPumpRpm =
-            state.value(
+            predictedState.value(
                 "pump_rpm"
             ).toDouble();
 
         latestPressure =
-            pressure;
+            predictedPressure;
 
         latestFlowRate =
-            state.value(
+            predictedState.value(
                 "flow_rate"
             ).toDouble();
 
         latestValveOpening =
-            state.value(
+            predictedState.value(
                 "valve_opening"
             ).toDouble();
 
@@ -651,18 +868,19 @@ void VoltGuardDashboard::loadSecurityEvents()
 
     file.close();
 
-    // --------------------------------------------------
-    // Update physics trend
-    // --------------------------------------------------
+    // ==================================================
+    // Update physics graph
+    // ==================================================
 
     pressureTrendWidget->setData(
-        pressureHistory,
+        predictedPressureHistory,
+        actualPressureHistory,
         safeHistory
     );
 
-    // --------------------------------------------------
+    // ==================================================
     // No valid events
-    // --------------------------------------------------
+    // ==================================================
 
     if (!foundEvent)
     {
@@ -670,20 +888,33 @@ void VoltGuardDashboard::loadSecurityEvents()
             "SYSTEM STATUS: NO VALID EVENTS"
         );
 
+        systemStatusLabel->setStyleSheet(
+            "font-size: 20px;"
+            "font-weight: bold;"
+            "padding: 12px;"
+            "background-color: #444444;"
+            "color: white;"
+            "border-radius: 8px;"
+        );
+
         decisionLabel->setText(
             "Decision: NO DATA"
         );
 
         actionLabel->setText(
-            "Action: Waiting for VoltGuard events"
+            "Action: WAITING"
+        );
+
+        reasonLabel->setText(
+            "Reason: No valid security events found"
         );
 
         return;
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // Update telemetry
-    // --------------------------------------------------
+    // ==================================================
 
     pumpRpmLabel->setText(
         QString(
@@ -698,7 +929,7 @@ void VoltGuardDashboard::loadSecurityEvents()
 
     pressureLabel->setText(
         QString(
-            "Pressure\n%1 bar"
+            "Predicted Pressure\n%1 bar"
         ).arg(
             latestPressure,
             0,
@@ -729,9 +960,9 @@ void VoltGuardDashboard::loadSecurityEvents()
         )
     );
 
-    // --------------------------------------------------
+    // ==================================================
     // Update security decision
-    // --------------------------------------------------
+    // ==================================================
 
     decisionLabel->setText(
         QString(
@@ -741,24 +972,24 @@ void VoltGuardDashboard::loadSecurityEvents()
         )
     );
 
+    reasonLabel->setText(
+        QString(
+            "Reason: %1"
+        ).arg(
+            latestReason
+        )
+    );
+
     if (latestDecision == "BLOCK")
     {
         systemStatusLabel->setText(
             "SYSTEM STATUS: ALERT"
         );
 
-        actionLabel->setText(
-            QString(
-                "Action: DROP  |  %1"
-            ).arg(
-                latestReason
-            )
-        );
-
         systemStatusLabel->setStyleSheet(
             "font-size: 20px;"
             "font-weight: bold;"
-            "padding: 10px;"
+            "padding: 12px;"
             "background-color: #5c1f1f;"
             "color: white;"
             "border-radius: 8px;"
@@ -767,8 +998,31 @@ void VoltGuardDashboard::loadSecurityEvents()
         decisionLabel->setStyleSheet(
             "font-size: 20px;"
             "font-weight: bold;"
-            "padding: 10px;"
+            "padding: 15px;"
+            "border: 1px solid #ff5c5c;"
+            "border-radius: 8px;"
             "color: #ff6b6b;"
+        );
+
+        actionLabel->setText(
+            "Action: DROP"
+        );
+
+        actionLabel->setStyleSheet(
+            "font-size: 18px;"
+            "font-weight: bold;"
+            "padding: 15px;"
+            "border: 1px solid #ff5c5c;"
+            "border-radius: 8px;"
+            "color: #ff6b6b;"
+        );
+
+        reasonLabel->setStyleSheet(
+            "font-size: 15px;"
+            "padding: 12px;"
+            "border: 1px solid #ff5c5c;"
+            "border-radius: 8px;"
+            "color: #ffb3b3;"
         );
     }
     else if (latestDecision == "ALLOW")
@@ -777,14 +1031,10 @@ void VoltGuardDashboard::loadSecurityEvents()
             "SYSTEM STATUS: PROTECTED"
         );
 
-        actionLabel->setText(
-            "Action: FORWARD"
-        );
-
         systemStatusLabel->setStyleSheet(
             "font-size: 20px;"
             "font-weight: bold;"
-            "padding: 10px;"
+            "padding: 12px;"
             "background-color: #1f4d2b;"
             "color: white;"
             "border-radius: 8px;"
@@ -793,8 +1043,31 @@ void VoltGuardDashboard::loadSecurityEvents()
         decisionLabel->setStyleSheet(
             "font-size: 20px;"
             "font-weight: bold;"
-            "padding: 10px;"
+            "padding: 15px;"
+            "border: 1px solid #6ee7a0;"
+            "border-radius: 8px;"
             "color: #6ee7a0;"
+        );
+
+        actionLabel->setText(
+            "Action: FORWARD"
+        );
+
+        actionLabel->setStyleSheet(
+            "font-size: 18px;"
+            "font-weight: bold;"
+            "padding: 15px;"
+            "border: 1px solid #6ee7a0;"
+            "border-radius: 8px;"
+            "color: #6ee7a0;"
+        );
+
+        reasonLabel->setStyleSheet(
+            "font-size: 15px;"
+            "padding: 12px;"
+            "border: 1px solid #6ee7a0;"
+            "border-radius: 8px;"
+            "color: #b9ffd0;"
         );
     }
     else
@@ -803,14 +1076,46 @@ void VoltGuardDashboard::loadSecurityEvents()
             "SYSTEM STATUS: UNKNOWN"
         );
 
+        systemStatusLabel->setStyleSheet(
+            "font-size: 20px;"
+            "font-weight: bold;"
+            "padding: 12px;"
+            "background-color: #444444;"
+            "color: white;"
+            "border-radius: 8px;"
+        );
+
+        decisionLabel->setStyleSheet(
+            "font-size: 20px;"
+            "font-weight: bold;"
+            "padding: 15px;"
+            "border: 1px solid gray;"
+            "border-radius: 8px;"
+        );
+
         actionLabel->setText(
             "Action: REVIEW REQUIRED"
         );
+
+        actionLabel->setStyleSheet(
+            "font-size: 18px;"
+            "font-weight: bold;"
+            "padding: 15px;"
+            "border: 1px solid gray;"
+            "border-radius: 8px;"
+        );
+
+        reasonLabel->setStyleSheet(
+            "font-size: 15px;"
+            "padding: 12px;"
+            "border: 1px solid gray;"
+            "border-radius: 8px;"
+        );
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // Keep newest event visible
-    // --------------------------------------------------
+    // ==================================================
 
     if (eventTable->rowCount() > 0)
     {
