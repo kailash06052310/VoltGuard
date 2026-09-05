@@ -16,6 +16,8 @@ qt_add_executable(VoltGuardDashboard
     main.cpp
     dashboard.cpp
     dashboard.h
+    trend_widget.cpp
+    trend_widget.h
 )
 
 target_link_libraries(VoltGuardDashboard
