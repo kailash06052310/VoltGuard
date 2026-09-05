@@ -11,3 +11,9 @@ Makefile
 *.exe
 *.o
 *.obj
+# Python cache
+__pycache__/
+*.pyc
+
+decision_engine/target/
+logs/

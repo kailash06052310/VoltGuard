@@ -1,11 +1,47 @@
 #include "packet_interceptor.h"
+
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <vector>
 
-int main()
+std::string hex_to_bytes(const std::string& hex)
 {
-    std::cout << "=== VoltGuard Packet Interceptor ===" << std::endl;
+    std::string bytes;
 
+    if (hex.length() % 2 != 0) {
+        return "";
+    }
+
+    for (size_t i = 0; i < hex.length(); i += 2) {
+        try {
+            unsigned int value =
+                std::stoul(hex.substr(i, 2), nullptr, 16);
+
+            bytes.push_back(static_cast<char>(value));
+        }
+        catch (...) {
+            return "";
+        }
+    }
+
+    return bytes;
+}
+
+void print_usage()
+{
+    std::cout << "VoltGuard Packet Interceptor\n\n";
+
+    std::cout << "Usage:\n";
+    std::cout << "  VoltGuard.exe <hex_modbus_packet>\n\n";
+
+    std::cout << "Example:\n";
+    std::cout << "  VoltGuard.exe 0001000000060106000103E8\n\n";
+}
+
+int main(int argc, char* argv[])
+{
     PacketInterceptor interceptor;
 
     if (!interceptor.start_capture()) {
@@ -15,59 +51,115 @@ int main()
         return 1;
     }
 
-    // Mock Modbus/TCP packet
-    //
-    // MBAP Header:
-    // Transaction ID = 1
-    // Protocol ID   = 0
-    // Length        = 6
-    // Unit ID       = 1
-    //
-    // PDU:
-    // Function Code = 3
-    // Start Address = 0
-    // Quantity      = 2
-    std::string mock_packet(
-        "\x00\x01"
-        "\x00\x00"
-        "\x00\x06"
-        "\x01"
-        "\x03"
-        "\x00\x00"
-        "\x00\x02",
-        12
-    );
+    std::string hex_packet;
 
-    ModbusPacket parsed_packet{};
+    // --------------------------------------------------
+    // Command-line packet mode
+    // --------------------------------------------------
 
-    // Test invalid/incomplete packet
-    std::string invalid_packet("\x00\x01\x00", 3);
+    if (argc >= 2) {
+        hex_packet = argv[1];
+    }
+    else {
+        // Default demo packet:
+        // Transaction ID = 1
+        // Protocol ID   = 0
+        // Length        = 6
+        // Unit ID       = 1
+        // Function      = 6
+        // Register      = 1
+        // Value         = 1000 RPM = 0x03E8
 
-    ModbusPacket invalid_result{};
+        hex_packet = "0001000000060106000103E8";
 
-    if (interceptor.parse_packet(invalid_packet, invalid_result)) {
-        std::cerr << "[ERROR] Invalid packet was accepted."
-                << std::endl;
+        std::cout << "[INFO] No packet supplied."
+                  << std::endl;
 
-        interceptor.stop_capture();
-        return 1;
+        std::cout << "[INFO] Using default demo Modbus/TCP packet."
+                  << std::endl;
     }
 
-std::cout << "[INFO] Invalid packet rejected successfully."
-          << std::endl;
+    std::string packet = hex_to_bytes(hex_packet);
 
-    if (!interceptor.parse_packet(mock_packet, parsed_packet)) {
-        std::cerr << "[ERROR] Failed to parse Modbus/TCP packet."
+    if (packet.empty()) {
+        std::cerr << "[ERROR] Invalid hexadecimal packet."
                   << std::endl;
 
         interceptor.stop_capture();
         return 1;
     }
 
-    interceptor.stop_capture();
+    ModbusPacket result{};
 
-    std::cout << "[INFO] Packet Interceptor test completed."
+    if (!interceptor.parse_packet(packet, result)) {
+        std::cerr << "[ERROR] Packet parsing failed."
+                  << std::endl;
+
+        interceptor.stop_capture();
+        return 1;
+    }
+
+    std::cout << std::endl;
+    std::cout << "======================================"
               << std::endl;
+    std::cout << "      VOLTGUARD PACKET RESULT"
+              << std::endl;
+    std::cout << "======================================"
+              << std::endl;
+
+    std::cout << "Transaction ID : "
+              << result.transaction_id << std::endl;
+
+    std::cout << "Protocol ID    : "
+              << result.protocol_id << std::endl;
+
+    std::cout << "Length         : "
+              << result.length << std::endl;
+
+    std::cout << "Unit ID        : "
+              << static_cast<int>(result.unit_id)
+              << std::endl;
+
+    std::cout << "Function Code  : "
+              << static_cast<int>(result.function_code)
+              << std::endl;
+
+    // --------------------------------------------------
+    // For Modbus function 0x06:
+    //
+    // Byte 8-9  = Register Address
+    // Byte 10-11 = Register Value
+    //
+    // Our simulated Register 1 represents Pump RPM.
+    // --------------------------------------------------
+
+    if (result.function_code == 0x06 &&
+        packet.size() >= 12) {
+
+        uint16_t register_address =
+            (static_cast<uint8_t>(packet[8]) << 8) |
+             static_cast<uint8_t>(packet[9]);
+
+        uint16_t register_value =
+            (static_cast<uint8_t>(packet[10]) << 8) |
+             static_cast<uint8_t>(packet[11]);
+
+        std::cout << "Register Addr  : "
+                  << register_address << std::endl;
+
+        std::cout << "Register Value : "
+                  << register_value << std::endl;
+
+        if (register_address == 1) {
+            std::cout << "Pump RPM       : "
+                      << register_value << std::endl;
+        }
+    }
+
+    std::cout << "======================================"
+              << std::endl;
+
+    interceptor.stop_capture();
 
     return 0;
 }
