@@ -1,6 +1,7 @@
 import re
 import subprocess
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 
@@ -15,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 from integration.modbus_physics_bridge import ModbusPhysicsBridge
+from integration.packet_enforcer import PacketEnforcer
 from integration.security_logger import SecurityLogger
 
 
@@ -44,15 +46,27 @@ class VoltGuardPipeline:
     Rust Decision Engine
         |
         v
-    ALLOW / BLOCK
+    Packet Enforcer
         |
-        v
-    Security Event Log
+        +----------------+
+        |                |
+        v                v
+     FORWARD           DROP
+        |                |
+        +-------+--------+
+                |
+                v
+        Security Event Log
     """
 
     def __init__(self):
         self.bridge = ModbusPhysicsBridge()
+        self.enforcer = PacketEnforcer()
         self.logger = SecurityLogger()
+
+    # --------------------------------------------------
+    # C++ Packet Interceptor
+    # --------------------------------------------------
 
     def parse_packet(self, hex_packet: str):
         """
@@ -62,7 +76,8 @@ class VoltGuardPipeline:
 
         if not PACKET_INTERCEPTOR.exists():
             raise FileNotFoundError(
-                f"Packet interceptor not found: {PACKET_INTERCEPTOR}"
+                f"Packet interceptor not found: "
+                f"{PACKET_INTERCEPTOR}"
             )
 
         process = subprocess.run(
@@ -84,7 +99,6 @@ class VoltGuardPipeline:
 
         output = process.stdout
 
-        # Extract the value printed by the C++ parser.
         match = re.search(
             r"Pump RPM\s*:\s*([0-9]+(?:\.[0-9]+)?)",
             output,
@@ -92,8 +106,8 @@ class VoltGuardPipeline:
 
         if not match:
             raise ValueError(
-                "Pump RPM could not be extracted from "
-                "Packet Interceptor output."
+                "Pump RPM could not be extracted "
+                "from Packet Interceptor output."
             )
 
         pump_rpm = float(match.group(1))
@@ -102,6 +116,10 @@ class VoltGuardPipeline:
             "pump_rpm": pump_rpm,
             "raw_output": output,
         }
+
+    # --------------------------------------------------
+    # Complete packet processing
+    # --------------------------------------------------
 
     def process_packet(
         self,
@@ -157,11 +175,30 @@ class VoltGuardPipeline:
 
         state = result["predicted_state"]
 
-        print(f"Pump RPM      : {state['pump_rpm']}")
-        print(f"Valve Opening : {state['valve_opening']}%")
-        print(f"Flow Rate     : {state['flow_rate']}")
-        print(f"Pressure      : {state['pressure']} bar")
-        print(f"Physics Safe  : {state['safe']}")
+        print(
+            f"Pump RPM      : "
+            f"{state['pump_rpm']}"
+        )
+
+        print(
+            f"Valve Opening : "
+            f"{state['valve_opening']}%"
+        )
+
+        print(
+            f"Flow Rate     : "
+            f"{state['flow_rate']}"
+        )
+
+        print(
+            f"Pressure      : "
+            f"{state['pressure']} bar"
+        )
+
+        print(
+            f"Physics Safe  : "
+            f"{state['safe']}"
+        )
 
         # --------------------------------------------------
         # Rust Decision Engine
@@ -173,15 +210,56 @@ class VoltGuardPipeline:
 
         decision = result["decision"]
 
-        print(f"Decision      : {decision['decision']}")
-        print(f"Reason        : {decision['reason']}")
+        print(
+            f"Decision      : "
+            f"{decision['decision']}"
+        )
+
+        print(
+            f"Reason        : "
+            f"{decision['reason']}"
+        )
+
+        # --------------------------------------------------
+        # Packet Enforcement
+        # --------------------------------------------------
+
+        print()
+        print("[5] Packet Enforcement Layer")
+        print("-" * 70)
+
+        enforcement = self.enforcer.enforce(
+            packet=hex_packet,
+            decision=decision["decision"],
+            reason=decision["reason"],
+        )
+
+        print(
+            f"Decision      : "
+            f"{enforcement.decision}"
+        )
+
+        print(
+            f"Action        : "
+            f"{enforcement.action}"
+        )
+
+        print(
+            f"Forwarded     : "
+            f"{enforcement.forwarded}"
+        )
+
+        print(
+            f"Enforcement   : "
+            f"{enforcement.reason}"
+        )
 
         # --------------------------------------------------
         # Security Event Logger
         # --------------------------------------------------
 
         print()
-        print("[5] Security Event Logger")
+        print("[6] Security Event Logger")
         print("-" * 70)
 
         event = self.logger.log_event(
@@ -192,7 +270,8 @@ class VoltGuardPipeline:
         )
 
         print(
-            f"Event recorded at: {event['timestamp']}"
+            f"Event recorded at: "
+            f"{event['timestamp']}"
         )
 
         # --------------------------------------------------
@@ -202,15 +281,23 @@ class VoltGuardPipeline:
         print()
         print("=" * 70)
 
-        if decision["decision"] == "ALLOW":
+        if enforcement.action == "FORWARD":
 
             print("                 [OK] COMMAND ALLOWED")
             print("                 ACTION: FORWARD")
+            print(
+                "                 OT ENDPOINT: "
+                "COMMAND ACCEPTED"
+            )
 
         else:
 
             print("                 [BLOCKED] COMMAND BLOCKED")
             print("                 ACTION: DROP")
+            print(
+                "                 OT ENDPOINT: "
+                "COMMAND REJECTED"
+            )
             print("                 SECURITY ALERT GENERATED")
 
         print("=" * 70)
@@ -220,6 +307,7 @@ class VoltGuardPipeline:
             "pump_rpm": parsed["pump_rpm"],
             "predicted_state": state,
             "decision": decision,
+            "enforcement": asdict(enforcement),
             "security_event": event,
         }
 
@@ -272,6 +360,34 @@ def main():
         dangerous_packet,
         duration=60,
     )
+
+    # --------------------------------------------------
+    # Enforcement statistics
+    # --------------------------------------------------
+
+    statistics = pipeline.enforcer.get_statistics()
+
+    print()
+    print("=" * 70)
+    print("              ENFORCEMENT SUMMARY")
+    print("=" * 70)
+
+    print(
+        f"Forwarded packets : "
+        f"{statistics['forwarded_packets']}"
+    )
+
+    print(
+        f"Dropped packets   : "
+        f"{statistics['dropped_packets']}"
+    )
+
+    print(
+        f"Total packets     : "
+        f"{statistics['total_packets']}"
+    )
+
+    print("=" * 70)
 
 
 if __name__ == "__main__":

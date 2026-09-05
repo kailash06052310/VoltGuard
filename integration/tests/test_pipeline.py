@@ -46,8 +46,14 @@ class TestVoltGuardPipeline(unittest.TestCase):
 
         return result.stdout
 
+    # --------------------------------------------------
+    # Safe packet
+    # --------------------------------------------------
+
     def test_safe_packet_is_allowed(self):
-        output = self.run_pipeline(SAFE_PACKET)
+        output = self.run_pipeline(
+            SAFE_PACKET
+        )
 
         self.assertIn(
             "Pump RPM      : 1000.0",
@@ -60,12 +66,38 @@ class TestVoltGuardPipeline(unittest.TestCase):
         )
 
         self.assertIn(
+            "[5] Packet Enforcement Layer",
+            output,
+        )
+
+        self.assertIn(
+            "Action        : FORWARD",
+            output,
+        )
+
+        self.assertIn(
+            "Forwarded     : True",
+            output,
+        )
+
+        self.assertIn(
             "ACTION: FORWARD",
             output,
         )
 
+        self.assertIn(
+            "OT ENDPOINT: COMMAND ACCEPTED",
+            output,
+        )
+
+    # --------------------------------------------------
+    # Dangerous packet
+    # --------------------------------------------------
+
     def test_dangerous_packet_is_blocked(self):
-        output = self.run_pipeline(DANGEROUS_PACKET)
+        output = self.run_pipeline(
+            DANGEROUS_PACKET
+        )
 
         self.assertIn(
             "Pump RPM      : 4000.0",
@@ -78,7 +110,27 @@ class TestVoltGuardPipeline(unittest.TestCase):
         )
 
         self.assertIn(
+            "[5] Packet Enforcement Layer",
+            output,
+        )
+
+        self.assertIn(
+            "Action        : DROP",
+            output,
+        )
+
+        self.assertIn(
+            "Forwarded     : False",
+            output,
+        )
+
+        self.assertIn(
             "ACTION: DROP",
+            output,
+        )
+
+        self.assertIn(
+            "OT ENDPOINT: COMMAND REJECTED",
             output,
         )
 
@@ -87,8 +139,14 @@ class TestVoltGuardPipeline(unittest.TestCase):
             output,
         )
 
+    # --------------------------------------------------
+    # Security log
+    # --------------------------------------------------
+
     def test_security_log_is_generated(self):
-        self.run_pipeline(DANGEROUS_PACKET)
+        self.run_pipeline(
+            DANGEROUS_PACKET
+        )
 
         self.assertTrue(
             LOG_FILE.exists(),
@@ -97,7 +155,9 @@ class TestVoltGuardPipeline(unittest.TestCase):
 
         lines = (
             LOG_FILE
-            .read_text(encoding="utf-8")
+            .read_text(
+                encoding="utf-8"
+            )
             .strip()
             .splitlines()
         )
@@ -108,7 +168,9 @@ class TestVoltGuardPipeline(unittest.TestCase):
             "Security log is empty.",
         )
 
-        event = json.loads(lines[-1])
+        event = json.loads(
+            lines[-1]
+        )
 
         self.assertEqual(
             event["pump_rpm"],
@@ -118,6 +180,49 @@ class TestVoltGuardPipeline(unittest.TestCase):
         self.assertEqual(
             event["decision"],
             "BLOCK",
+        )
+
+        self.assertEqual(
+            event["reason"],
+            "Pressure exceeds safe limit: 122.67 bar",
+        )
+
+    # --------------------------------------------------
+    # Safe command reaches forwarding stage
+    # --------------------------------------------------
+
+    def test_safe_command_reaches_ot_endpoint(self):
+        output = self.run_pipeline(
+            SAFE_PACKET
+        )
+
+        self.assertIn(
+            "OT ENDPOINT: COMMAND ACCEPTED",
+            output,
+        )
+
+        self.assertNotIn(
+            "OT ENDPOINT: COMMAND REJECTED",
+            output,
+        )
+
+    # --------------------------------------------------
+    # Dangerous command never reaches OT endpoint
+    # --------------------------------------------------
+
+    def test_dangerous_command_is_rejected_at_enforcement(self):
+        output = self.run_pipeline(
+            DANGEROUS_PACKET
+        )
+
+        self.assertIn(
+            "OT ENDPOINT: COMMAND REJECTED",
+            output,
+        )
+
+        self.assertNotIn(
+            "OT ENDPOINT: COMMAND ACCEPTED",
+            output,
         )
 
 
