@@ -14,3 +14,6 @@ Makefile
 # Python cache
 __pycache__/
 *.pyc
+
+decision_engine/target/
+logs/
